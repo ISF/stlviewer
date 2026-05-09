@@ -1,0 +1,15 @@
+[package]
+name = "stlviewer-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "stlviewer command-line shim"
+
+[[bin]]
+name = "stlviewer"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"

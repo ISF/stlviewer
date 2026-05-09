@@ -1,0 +1,27 @@
+# Rust
+target/
+**/*.rs.bk
+Cargo.lock.bak
+
+# Node / JS toolchain
+node_modules/
+dist/
+.vite/
+*.log
+*.tsbuildinfo
+
+# Tauri
+src-tauri/target/
+src-tauri/gen/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+
+# Env
+.env
+.env.local
+.env.*.local
