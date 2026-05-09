@@ -35,18 +35,18 @@ stlviewer/
 Required toolchain:
 
 - Rust (stable) — `rustc`, `cargo`
-- [Bun](https://bun.sh) for the JS side: `curl -fsSL https://bun.sh/install | bash`
+- Node.js (≥ 20) and npm — `brew install node` on macOS
 
 Install dependencies:
 
 ```sh
-bun install
+npm install
 ```
 
 Run the dev app:
 
 ```sh
-bun run tauri dev
+npm run tauri dev
 ```
 
 ## Architecture
