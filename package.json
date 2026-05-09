@@ -15,6 +15,7 @@
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-dialog": "^2.7.1",
     "@tauri-apps/plugin-fs": "^2.5.1",
+    "occt-import-js": "^0.0.23",
     "three": "^0.170.0"
   },
   "devDependencies": {

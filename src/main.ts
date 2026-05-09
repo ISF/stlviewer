@@ -1,10 +1,12 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
+
+import { parseStl } from "./loaders/stl";
+import { parseStep } from "./loaders/step";
 
 interface InitialArgs {
   file: string | null;
@@ -42,7 +44,10 @@ const fill = new THREE.DirectionalLight(0xb0c4de, 0.25);
 fill.position.set(-60, -80, 40);
 scene.add(fill);
 
-const meshMaterial = new THREE.MeshStandardMaterial({
+// Shared default material — used for STL meshes and for STEP parts that
+// don't carry their own color. STEP parts WITH a color get their own
+// material in step.ts; those are disposed when the group is replaced.
+const defaultMaterial = new THREE.MeshStandardMaterial({
   color: 0xb6bdc6,
   metalness: 0.1,
   roughness: 0.55,
@@ -50,24 +55,22 @@ const meshMaterial = new THREE.MeshStandardMaterial({
   flatShading: false,
 });
 
-let currentMesh: THREE.Mesh | null = null;
+let currentObject: THREE.Object3D | null = null;
 let currentPath: string | null = null;
 let watchEnabled = false;
-let watchActive = false; // whether the Rust watcher is currently armed
+let watchActive = false;
 
-// Default camera framing (used when no file loaded).
 camera.position.set(80, -80, 60);
 camera.lookAt(0, 0, 0);
 
-function fitCameraToMesh(mesh: THREE.Mesh, padding = 1.4) {
-  const box = new THREE.Box3().setFromObject(mesh);
+function fitCameraTo(obj: THREE.Object3D, padding = 1.4) {
+  const box = new THREE.Box3().setFromObject(obj);
   const size = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());
   const maxDim = Math.max(size.x, size.y, size.z, 1e-3);
   const fovRad = (camera.fov * Math.PI) / 180;
   const dist = (maxDim / 2 / Math.tan(fovRad / 2)) * padding;
 
-  // Three-quarter view: in front-right, slightly above.
   const dir = new THREE.Vector3(1, -1, 0.6).normalize();
   camera.position.copy(center).addScaledVector(dir, dist);
   controls.target.copy(center);
@@ -91,23 +94,33 @@ function ext(path: string) {
   return path.toLowerCase().split(".").pop() ?? "";
 }
 
-function disposeMesh(mesh: THREE.Mesh) {
-  scene.remove(mesh);
-  (mesh.geometry as THREE.BufferGeometry).dispose();
+function disposeCurrent() {
+  if (!currentObject) return;
+  scene.remove(currentObject);
+  currentObject.traverse((child) => {
+    if (child instanceof THREE.Mesh) {
+      child.geometry.dispose();
+      const mats = Array.isArray(child.material) ? child.material : [child.material];
+      for (const m of mats) {
+        if (m !== defaultMaterial) m.dispose();
+      }
+    }
+  });
+  currentObject = null;
 }
 
 async function loadFile(path: string) {
   const e = ext(path);
-  if (e === "step" || e === "stp") {
-    setStatus(`STEP support not yet implemented: ${basename(path)}`, { error: true });
-    return;
-  }
-  if (e !== "stl") {
+  const isStep = e === "step" || e === "stp";
+  const isStl = e === "stl";
+  if (!isStep && !isStl) {
     setStatus(`unsupported format: .${e}`, { error: true });
     return;
   }
 
   try {
+    setStatus(`loading ${basename(path)}…`);
+
     const raw = await invoke<number[] | Uint8Array | ArrayBuffer>("read_file_bytes", { path });
     const u8 =
       raw instanceof Uint8Array
@@ -115,23 +128,36 @@ async function loadFile(path: string) {
         : raw instanceof ArrayBuffer
           ? new Uint8Array(raw)
           : new Uint8Array(raw);
-    const ab = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength) as ArrayBuffer;
 
-    const geom = new STLLoader().parse(ab);
-    if (!geom.attributes.normal) geom.computeVertexNormals();
+    let object: THREE.Object3D;
+    let triangleCount: number;
+    let partInfo = "";
 
-    const mesh = new THREE.Mesh(geom, meshMaterial);
-    if (currentMesh) disposeMesh(currentMesh);
-    scene.add(mesh);
-    currentMesh = mesh;
+    if (isStl) {
+      const mesh = parseStl(u8, defaultMaterial);
+      object = new THREE.Group();
+      object.add(mesh);
+      triangleCount = (mesh.geometry as THREE.BufferGeometry).attributes.position.count / 3;
+    } else {
+      // STEP: yield to the event loop so the "loading…" status paints
+      // before occt-import-js blocks the main thread.
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
+      const parsed = await parseStep(u8, defaultMaterial);
+      object = parsed.group;
+      triangleCount = parsed.triangleCount;
+      partInfo = `  ·  ${parsed.partCount} part${parsed.partCount === 1 ? "" : "s"}`;
+    }
+
+    disposeCurrent();
+    scene.add(object);
+    currentObject = object;
     currentPath = path;
 
-    fitCameraToMesh(mesh);
-
+    fitCameraTo(object);
     hintEl.style.display = "none";
-    const tris = geom.attributes.position.count / 3;
+
     setStatus(
-      `${basename(path)}  ·  ${tris.toLocaleString()} tris`,
+      `${basename(path)}  ·  ${triangleCount.toLocaleString()} tris${partInfo}`,
       { watching: watchActive },
     );
 
@@ -144,16 +170,24 @@ async function loadFile(path: string) {
   }
 }
 
+function currentTriCount(): number {
+  if (!currentObject) return 0;
+  let count = 0;
+  currentObject.traverse((child) => {
+    if (child instanceof THREE.Mesh) {
+      count += (child.geometry as THREE.BufferGeometry).attributes.position.count / 3;
+    }
+  });
+  return count;
+}
+
 async function armWatcher(path: string) {
   try {
     await invoke("start_watch", { path });
     watchActive = true;
     if (currentPath) {
-      const tris = currentMesh
-        ? (currentMesh.geometry as THREE.BufferGeometry).attributes.position.count / 3
-        : 0;
       setStatus(
-        `${basename(currentPath)}  ·  ${tris.toLocaleString()} tris`,
+        `${basename(currentPath)}  ·  ${currentTriCount().toLocaleString()} tris`,
         { watching: true },
       );
     }
@@ -166,9 +200,8 @@ async function armWatcher(path: string) {
 async function disarmWatcher() {
   await invoke("stop_watch");
   watchActive = false;
-  if (currentPath && currentMesh) {
-    const tris = (currentMesh.geometry as THREE.BufferGeometry).attributes.position.count / 3;
-    setStatus(`${basename(currentPath)}  ·  ${tris.toLocaleString()} tris`);
+  if (currentPath) {
+    setStatus(`${basename(currentPath)}  ·  ${currentTriCount().toLocaleString()} tris`);
   }
 }
 
@@ -185,15 +218,17 @@ async function pickAndLoad() {
   const picked = await openDialog({
     multiple: false,
     directory: false,
-    filters: [{ name: "STL Mesh", extensions: ["stl", "STL"] }],
+    filters: [
+      { name: "CAD models", extensions: ["stl", "STL", "step", "STEP", "stp", "STP"] },
+      { name: "STL Mesh", extensions: ["stl", "STL"] },
+      { name: "STEP", extensions: ["step", "STEP", "stp", "STP"] },
+    ],
   });
   if (typeof picked === "string") {
     await loadFile(picked);
   }
 }
 
-// File watcher events come in bursts (atomic save = remove + create).
-// Coalesce within 120ms.
 let reloadTimer: number | undefined;
 function scheduleReload(path: string) {
   if (reloadTimer !== undefined) window.clearTimeout(reloadTimer);
@@ -204,8 +239,8 @@ function scheduleReload(path: string) {
 }
 
 function resetView() {
-  if (currentMesh) {
-    fitCameraToMesh(currentMesh);
+  if (currentObject) {
+    fitCameraTo(currentObject);
   } else {
     camera.position.set(80, -80, 60);
     controls.target.set(0, 0, 0);
@@ -235,7 +270,6 @@ async function bootstrap() {
 
   watchEnabled = args.watch;
 
-  // Menu events from the macOS menu bar
   await listen("menu:open", () => void pickAndLoad());
   await listen("menu:reset_view", () => resetView());
   await listen("menu:toggle_grid", () => {
@@ -246,12 +280,10 @@ async function bootstrap() {
   });
   await listen("menu:toggle_watch", () => void setWatchEnabled(!watchEnabled));
 
-  // File watcher reload
   await listen<string>("file-changed", (e) => {
     if (e.payload) scheduleReload(e.payload);
   });
 
-  // OS-native drag and drop
   const win = getCurrentWebviewWindow();
   await win.onDragDropEvent((e) => {
     if (e.payload.type === "drop" && e.payload.paths.length > 0) {
