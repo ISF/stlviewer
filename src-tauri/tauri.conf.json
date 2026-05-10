@@ -24,13 +24,20 @@
     }
   },
   "bundle": {
-    "active": false,
-    "targets": "all",
+    "active": true,
+    "targets": ["app"],
     "category": "DeveloperTool",
     "shortDescription": "STL/STEP viewer for Claude-assisted CAD",
     "longDescription": "Lightweight STL/STEP viewer designed as a companion for Claude-assisted CAD design and 3D printing.",
     "copyright": "Copyright (c) 2026 Ivan Sichmann Freitas",
     "licenseFile": "../LICENSE",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
     "resources": {
       "../licenses/occt.txt": "licenses/occt.txt",
       "../licenses/occt-import-js.txt": "licenses/occt-import-js.txt",

@@ -15,7 +15,12 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-OUT = Path(__file__).resolve().parent.parent / "src-tauri" / "icons" / "icon.png"
+# Master source PNG. `npm run tauri icon <this path>` rebuilds the per-platform
+# variants (icon.icns, the size-specific PNGs, etc.) from it. The
+# tauri-generated icon.png is a 512-pixel downscale of the source and gets
+# overwritten by tauri icon; we keep the 1024 master here so re-runs are
+# deterministic.
+OUT = Path(__file__).resolve().parent.parent / "src-tauri" / "icons" / "icon-source.png"
 
 SIZE = 1024
 SUPER = 4  # supersampling factor
