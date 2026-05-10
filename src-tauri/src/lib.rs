@@ -105,6 +105,21 @@ fn build_menu<R: tauri::Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
                 Some(AboutMetadata {
                     name: Some("stlviewer".into()),
                     version: Some(env!("CARGO_PKG_VERSION").into()),
+                    authors: Some(vec!["Ivan Sichmann Freitas".into()]),
+                    copyright: Some("Copyright (c) 2026 Ivan Sichmann Freitas".into()),
+                    license: Some("MIT".into()),
+                    // macOS's native About panel shows `comments` near the top
+                    // and `credits` in a smaller area below. We surface the
+                    // OCCT acknowledgement here so the LGPL attribution is
+                    // discoverable from inside the app.
+                    comments: Some(
+                        "STL/STEP viewer for Claude-assisted CAD design and 3D printing.".into(),
+                    ),
+                    credits: Some(
+                        "STEP parsing uses Open CASCADE Technology (LGPL-2.1) via occt-import-js. \
+                         See THIRD_PARTY_NOTICES.md in the application bundle for license details."
+                            .into(),
+                    ),
                     ..Default::default()
                 }),
             )?,

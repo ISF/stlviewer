@@ -28,6 +28,14 @@
     "targets": "all",
     "category": "DeveloperTool",
     "shortDescription": "STL/STEP viewer for Claude-assisted CAD",
+    "longDescription": "Lightweight STL/STEP viewer designed as a companion for Claude-assisted CAD design and 3D printing.",
+    "copyright": "Copyright (c) 2026 Ivan Sichmann Freitas",
+    "licenseFile": "../LICENSE",
+    "resources": {
+      "../licenses/occt.txt": "licenses/occt.txt",
+      "../licenses/occt-import-js.txt": "licenses/occt-import-js.txt",
+      "../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md"
+    },
     "macOS": {
       "minimumSystemVersion": "11.0"
     }
