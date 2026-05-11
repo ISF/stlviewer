@@ -1,3 +1,5 @@
+mod config;
+
 use std::path::PathBuf;
 use std::sync::Mutex;
 
@@ -6,6 +8,8 @@ use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::Serialize;
 use tauri::menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{AppHandle, Emitter};
+
+use crate::config::{Settings, UpAxis};
 
 #[derive(Parser, Debug, Clone)]
 #[command(name = "stlviewer", version, about = "STL/STEP viewer")]
@@ -26,6 +30,12 @@ struct CliArgs {
 struct InitialArgs {
     file: Option<String>,
     watch: bool,
+    /// Effective settings the frontend needs at scene-construction time.
+    /// Keep this struct flat so the JS side can read fields directly.
+    up_axis: UpAxis,
+    background_color: [f32; 3],
+    grid_visible: bool,
+    axes_visible: bool,
 }
 
 #[derive(Default)]
@@ -198,9 +208,16 @@ fn build_menu<R: tauri::Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
 
 pub fn run() {
     let cli = CliArgs::try_parse().unwrap_or_else(|e| e.exit());
+
+    let settings = Settings::new(config::default_store());
+
     let initial = InitialArgs {
         file: cli.file.as_ref().map(|p| p.to_string_lossy().into_owned()),
-        watch: resolve_watch(cli.watch, cli.no_watch),
+        watch: resolve_watch(cli.watch, cli.no_watch, settings.watch_by_default()),
+        up_axis: settings.up_axis(),
+        background_color: settings.background_color(),
+        grid_visible: settings.grid_visible(),
+        axes_visible: settings.axes_visible(),
     };
 
     tauri::Builder::default()
@@ -228,24 +245,14 @@ pub fn run() {
         .expect("error while running tauri application");
 }
 
-/// Precedence: explicit CLI flag > config default > built-in default (false).
-fn resolve_watch(watch: bool, no_watch: bool) -> bool {
-    if watch {
+/// Precedence: explicit CLI flag > stored config > built-in default (false).
+/// `config_default` is supplied by `Settings::watch_by_default()`.
+fn resolve_watch(watch_flag: bool, no_watch_flag: bool, config_default: bool) -> bool {
+    if watch_flag {
         return true;
     }
-    if no_watch {
+    if no_watch_flag {
         return false;
     }
-    config_default_watch().unwrap_or(false)
-}
-
-#[cfg(target_os = "macos")]
-fn config_default_watch() -> Option<bool> {
-    // TODO: read CFPreferences for `com.ivansich.stlviewer` key `watch_by_default`.
-    None
-}
-
-#[cfg(not(target_os = "macos"))]
-fn config_default_watch() -> Option<bool> {
-    None
+    config_default
 }
