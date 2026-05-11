@@ -3035,6 +3035,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "core-foundation",
+ "core-foundation-sys",
  "notify",
  "serde",
  "serde_json",

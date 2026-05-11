@@ -8,10 +8,25 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { parseStl } from "./loaders/stl";
 import { parseStep } from "./loaders/step";
 
+type UpAxis = "z" | "y";
+
 interface InitialArgs {
   file: string | null;
   watch: boolean;
+  up_axis: UpAxis;
+  background_color: [number, number, number];
+  grid_visible: boolean;
+  axes_visible: boolean;
 }
+
+const FALLBACK_ARGS: InitialArgs = {
+  file: null,
+  watch: false,
+  up_axis: "z",
+  background_color: [0x18 / 255, 0x1c / 255, 0x22 / 255],
+  grid_visible: true,
+  axes_visible: true,
+};
 
 const canvas = document.getElementById("app") as HTMLCanvasElement;
 const hintEl = document.getElementById("hint") as HTMLDivElement;
@@ -59,8 +74,24 @@ let currentObject: THREE.Object3D | null = null;
 let currentPath: string | null = null;
 let watchEnabled = false;
 let watchActive = false;
+let currentUpAxis: UpAxis = "z";
 
-camera.position.set(80, -80, 60);
+function cameraDirection(): THREE.Vector3 {
+  // Three-quarter view biased toward the configured up axis. For Z-up
+  // (CAD) we look from +X, −Y, slightly above; for Y-up (graphics
+  // convention) we look from +X, slightly above, slightly toward +Z.
+  return currentUpAxis === "z"
+    ? new THREE.Vector3(1, -1, 0.6).normalize()
+    : new THREE.Vector3(1, 0.6, 1).normalize();
+}
+
+function defaultCameraPosition(): THREE.Vector3 {
+  return currentUpAxis === "z"
+    ? new THREE.Vector3(80, -80, 60)
+    : new THREE.Vector3(80, 60, 80);
+}
+
+camera.position.copy(defaultCameraPosition());
 camera.lookAt(0, 0, 0);
 
 function fitCameraTo(obj: THREE.Object3D, padding = 1.4) {
@@ -71,12 +102,39 @@ function fitCameraTo(obj: THREE.Object3D, padding = 1.4) {
   const fovRad = (camera.fov * Math.PI) / 180;
   const dist = (maxDim / 2 / Math.tan(fovRad / 2)) * padding;
 
-  const dir = new THREE.Vector3(1, -1, 0.6).normalize();
+  const dir = cameraDirection();
   camera.position.copy(center).addScaledVector(dir, dist);
   controls.target.copy(center);
   camera.near = Math.max(maxDim * 0.001, 0.01);
   camera.far = Math.max(dist * 100, 1000);
   camera.updateProjectionMatrix();
+  controls.update();
+}
+
+function applyInitialSettings(args: InitialArgs) {
+  // Background.
+  scene.background = new THREE.Color(
+    args.background_color[0],
+    args.background_color[1],
+    args.background_color[2],
+  );
+
+  // Up axis affects camera, the grid's plane, and which default position
+  // makes for a clean "three-quarter view." OrbitControls reads camera.up
+  // each tick, so we don't need to re-construct it.
+  currentUpAxis = args.up_axis;
+  if (args.up_axis === "z") {
+    camera.up.set(0, 0, 1);
+    grid.rotation.x = Math.PI / 2;      // XZ-plane mesh → XY-plane (ground)
+  } else {
+    camera.up.set(0, 1, 0);
+    grid.rotation.x = 0;                // default GridHelper sits in XZ
+  }
+  camera.position.copy(defaultCameraPosition());
+  camera.lookAt(0, 0, 0);
+
+  grid.visible = args.grid_visible;
+  axes.visible = args.axes_visible;
   controls.update();
 }
 
@@ -242,7 +300,7 @@ function resetView() {
   if (currentObject) {
     fitCameraTo(currentObject);
   } else {
-    camera.position.set(80, -80, 60);
+    camera.position.copy(defaultCameraPosition());
     controls.target.set(0, 0, 0);
     camera.updateProjectionMatrix();
     controls.update();
@@ -265,9 +323,10 @@ async function bootstrap() {
     args = await invoke<InitialArgs>("get_initial_args");
   } catch (err) {
     console.error("get_initial_args failed:", err);
-    args = { file: null, watch: false };
+    args = FALLBACK_ARGS;
   }
 
+  applyInitialSettings(args);
   watchEnabled = args.watch;
 
   await listen("menu:open", () => void pickAndLoad());
