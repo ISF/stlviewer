@@ -84,7 +84,7 @@ pub fn default_store() -> Arc<dyn KvStore> {
 // promote this to a trait and call sites won't need to change.
 // ---------------------------------------------------------------------------
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum UpAxis {
     Z,
@@ -111,7 +111,9 @@ impl UpAxis {
 /// Default background — kept in sync with the original frontend constant.
 const DEFAULT_BG: [u8; 3] = [0x18, 0x1c, 0x22];
 
-/// Field-named accessor over a `KvStore`.
+/// Field-named accessor over a `KvStore`. Cheap to clone — the underlying
+/// store is `Arc`-shared so multiple holders see the same writes.
+#[derive(Clone)]
 pub struct Settings {
     store: Arc<dyn KvStore>,
 }
