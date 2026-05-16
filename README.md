@@ -1,15 +1,75 @@
 # stlviewer
 
-Lightweight STL/STEP viewer intended as a companion for Claude-assisted CAD
-design and 3D printing workflows. Mac-first prototype; Linux and Windows
-support planned.
+Lightweight STL/STEP viewer for CAD design and 3D printing. macOS only for
+now; Linux and Windows are planned.
 
-## Status
+## Features
 
-STL and STEP loading work (drag-and-drop, native macOS `File ▸ Open`,
-or `stlviewer <path>` from the terminal once installed). Orbit/pan/zoom,
-auto-fit to bounding box, file-watch reload. Bundling and CFPreferences-
-backed config are next.
+- Opens `.stl` (binary or ASCII) and `.step` / `.stp` files.
+- Drag-and-drop a file onto the window, open via the native ⌘O dialog, or
+  pass a path to `stlviewer` from the terminal.
+- Orbit / pan / zoom with mouse + trackpad gestures. ⌘0 fits the view to
+  the loaded model.
+- File watching — re-export from your CAD tool and the viewer reloads
+  automatically (toggle from `View ▸ Auto-Reload File` or `--watch` on the
+  command line).
+- Native macOS menu bar with persistent View toggles for grid, axes, and
+  auto-reload. Choices survive across launches.
+- Settings live in macOS `defaults` under the
+  `com.ivansich.stlviewer` domain, so you can tweak them from the terminal:
+
+  ```sh
+  defaults write com.ivansich.stlviewer background_color -string "#1a2030"
+  defaults write com.ivansich.stlviewer up_axis -string "y"
+  defaults delete com.ivansich.stlviewer up_axis        # back to default
+  ```
+
+## Install
+
+There are no prebuilt binaries yet — build from source:
+
+```sh
+git clone https://github.com/ISF/stlviewer.git
+cd stlviewer
+bun install
+./scripts/install.sh
+```
+
+`install.sh` builds the release `.app`, drops it in `/Applications/`,
+registers it with Launch Services, and puts the `stlviewer` CLI shim on
+your `$PATH` (`/opt/homebrew/bin` on Apple Silicon, `/usr/local/bin`
+elsewhere). After install:
+
+```sh
+stlviewer                            # empty window
+stlviewer path/to/model.stl          # open a file
+stlviewer --watch path/to/part.step  # open + reload on save
+```
+
+`./scripts/uninstall.sh` reverses the install.
+
+### Build requirements
+
+- Rust (stable) — `rustc`, `cargo`
+- [Bun](https://bun.sh) — `brew install oven-sh/bun/bun` on macOS
+- Xcode Command Line Tools (for the macOS frameworks Tauri links against)
+
+## Develop
+
+Run the app in dev mode (Vite hot-reload + cargo watch + native window):
+
+```sh
+bun install
+bun run tauri dev
+```
+
+Build a release `.app` bundle without installing:
+
+```sh
+bun run tauri build
+```
+
+The bundle ends up at `target/release/bundle/macos/stlviewer.app`.
 
 ## Layout
 
@@ -17,75 +77,58 @@ backed config are next.
 stlviewer/
 ├── Cargo.toml              # Rust workspace
 ├── package.json            # JS toolchain (Bun-driven)
+├── bun.lock
 ├── vite.config.ts
 ├── tsconfig.json
 ├── index.html              # frontend entry
-├── src/                    # TypeScript: Three.js scene, loaders, UI
-│   ├── main.ts
-│   ├── loaders/{stl.ts, step.ts}
+├── src/                    # TypeScript
+│   ├── main.ts             # scene + IPC wiring
+│   ├── debug.ts
+│   ├── loaders/{stl,step,step.worker,step-types}.ts
 │   └── types/
 ├── src-tauri/              # Tauri GUI binary (Rust)
 │   ├── Cargo.toml
 │   ├── tauri.conf.json
+│   ├── .taurignore         # dev-watcher exclusions
 │   ├── capabilities/
 │   ├── icons/
-│   └── src/{main.rs, lib.rs}
+│   └── src/
+│       ├── main.rs, lib.rs
+│       └── config/         # KvStore trait + Settings + CFPreferences impl
 ├── crates/
 │   └── stlviewer-cli/      # `stlviewer` shim that goes on $PATH
-│       └── src/main.rs
-├── licenses/               # third-party license texts (vendored)
-└── scripts/                # tooling: icon generator, install scripts, …
-```
-
-## Setup
-
-Required toolchain:
-
-- Rust (stable) — `rustc`, `cargo`
-- [Bun](https://bun.sh) — `brew install oven-sh/bun/bun` on macOS
-
-Install dependencies:
-
-```sh
-bun install
-```
-
-Run the dev app:
-
-```sh
-bun run tauri dev
-```
-
-Build a release `.app` bundle:
-
-```sh
-bun run tauri build
+├── licenses/               # vendored third-party license texts
+├── scripts/                # icon generator, install / uninstall
+├── LICENSE                 # MIT
+└── THIRD_PARTY_NOTICES.md  # OCCT / occt-import-js attribution
 ```
 
 ## Architecture
 
-- **GUI** is Tauri 2 (Rust shell) + Three.js (rendering) inside the OS-native
-  webview. No bundled JS engine — the OS provides the JS runtime (WKWebView
-  on macOS, WebView2 on Windows, WebKitGTK on Linux).
+- **GUI** is Tauri 2 (Rust shell) + Three.js (rendering) inside the
+  OS-native webview. No bundled JS engine — the OS provides the JS runtime
+  (WKWebView on macOS, WebView2 on Windows, WebKitGTK on Linux).
+- **STEP parsing** runs in a Web Worker via
+  [occt-import-js](https://github.com/kovacsv/occt-import-js), a WebAssembly
+  build of Open CASCADE Technology. Off the main thread so the renderer
+  stays responsive even on large assemblies.
 - **CLI shim** is a tiny Rust binary that hands off to the GUI via
-  `open -na stlviewer --args …` on macOS so the terminal returns immediately
-  and each invocation is its own process / window.
-- **STEP** is parsed by Open CASCADE Technology, loaded as a WebAssembly
-  module (`occt-import-js`) at runtime.
-- **Config** will live in macOS `defaults` (CFPreferences) under bundle id
-  `com.ivansich.stlviewer`, falling back to per-platform conventions on
-  Linux/Windows.
+  `open -na stlviewer --args …` on macOS, so the terminal returns
+  immediately and each invocation is its own process / window.
+- **Settings** live in macOS CFPreferences via a small `KvStore` trait;
+  Linux (XDG) and Windows (Registry) backends can drop in alongside without
+  touching the rest of the app.
 
 ## Licensing
 
-`stlviewer`'s own source is **MIT**-licensed — see [LICENSE](./LICENSE).
+`stlviewer`'s own source is **MIT** — see [LICENSE](./LICENSE).
 
 At runtime it loads Open CASCADE Technology (LGPL-2.1) via the
 [`occt-import-js`](https://github.com/kovacsv/occt-import-js) WebAssembly
-build. That dependency stays separate (a discrete `.wasm` asset) so users
+build. That dependency stays separate as a discrete `.wasm` asset so users
 remain free to substitute their own OCCT build, per LGPL-2.1.
 
 Full attribution, license texts, and substitution instructions are in
 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md). Vendored copies of the
-license files live under [`licenses/`](./licenses/) and are bundled into
-the application's `Contents/Resources/` when built.
+LGPL license texts live under [`licenses/`](./licenses/) and are bundled
+into the application's `Contents/Resources/` when built.
