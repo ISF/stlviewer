@@ -15,7 +15,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-# Master source PNG. `npm run tauri icon <this path>` rebuilds the per-platform
+# Master source PNG. `bun run tauri icon <this path>` rebuilds the per-platform
 # variants (icon.icns, the size-specific PNGs, etc.) from it. The
 # tauri-generated icon.png is a 512-pixel downscale of the source and gets
 # overwritten by tauri icon; we keep the 1024 master here so re-runs are
