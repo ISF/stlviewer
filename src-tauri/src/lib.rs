@@ -24,6 +24,10 @@ struct CliArgs {
     /// Disable watching even if config has it on by default
     #[arg(long)]
     no_watch: bool,
+
+    /// Verbose console logging of internal events (loader breadcrumbs, IPC, …)
+    #[arg(long)]
+    debug: bool,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -36,6 +40,7 @@ struct InitialArgs {
     background_color: [f32; 3],
     grid_visible: bool,
     axes_visible: bool,
+    debug: bool,
 }
 
 #[derive(Default)]
@@ -218,6 +223,7 @@ pub fn run() {
         background_color: settings.background_color(),
         grid_visible: settings.grid_visible(),
         axes_visible: settings.axes_visible(),
+        debug: cli.debug,
     };
 
     tauri::Builder::default()

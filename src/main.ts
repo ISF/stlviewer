@@ -7,6 +7,7 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 
 import { parseStl } from "./loaders/stl";
 import { parseStep } from "./loaders/step";
+import { dbg, setDebugEnabled } from "./debug";
 
 type UpAxis = "z" | "y";
 
@@ -17,6 +18,7 @@ interface InitialArgs {
   background_color: [number, number, number];
   grid_visible: boolean;
   axes_visible: boolean;
+  debug: boolean;
 }
 
 const FALLBACK_ARGS: InitialArgs = {
@@ -26,6 +28,7 @@ const FALLBACK_ARGS: InitialArgs = {
   background_color: [0x18 / 255, 0x1c / 255, 0x22 / 255],
   grid_visible: true,
   axes_visible: true,
+  debug: false,
 };
 
 const canvas = document.getElementById("app") as HTMLCanvasElement;
@@ -177,6 +180,7 @@ async function loadFile(path: string) {
   }
 
   try {
+    dbg("loadFile", "start", { path, ext: e });
     setStatus(`loading ${basename(path)}…`);
 
     const raw = await invoke<number[] | Uint8Array | ArrayBuffer>("read_file_bytes", { path });
@@ -186,6 +190,7 @@ async function loadFile(path: string) {
         : raw instanceof ArrayBuffer
           ? new Uint8Array(raw)
           : new Uint8Array(raw);
+    dbg("loadFile", "bytes read", { bytes: u8.byteLength });
 
     let object: THREE.Object3D;
     let triangleCount: number;
@@ -200,7 +205,12 @@ async function loadFile(path: string) {
       // STEP: yield to the event loop so the "loading…" status paints
       // before occt-import-js blocks the main thread.
       await new Promise((r) => requestAnimationFrame(() => r(null)));
+      dbg("loadFile", "calling parseStep");
       const parsed = await parseStep(u8, defaultMaterial);
+      dbg("loadFile", "parseStep resolved", {
+        partCount: parsed.partCount,
+        triangleCount: parsed.triangleCount,
+      });
       object = parsed.group;
       triangleCount = parsed.triangleCount;
       partInfo = `  ·  ${parsed.partCount} part${parsed.partCount === 1 ? "" : "s"}`;
@@ -212,6 +222,7 @@ async function loadFile(path: string) {
     currentPath = path;
 
     fitCameraTo(object);
+    dbg("loadFile", "added to scene + camera fit");
     hintEl.style.display = "none";
 
     setStatus(
@@ -325,6 +336,9 @@ async function bootstrap() {
     console.error("get_initial_args failed:", err);
     args = FALLBACK_ARGS;
   }
+
+  setDebugEnabled(args.debug);
+  dbg("bootstrap", "got initial args", args);
 
   applyInitialSettings(args);
   watchEnabled = args.watch;

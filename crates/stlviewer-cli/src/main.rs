@@ -24,6 +24,10 @@ struct Args {
     /// Do not watch the file (overrides config default)
     #[arg(long)]
     no_watch: bool,
+
+    /// Forward --debug to the GUI for verbose console logging
+    #[arg(long)]
+    debug: bool,
 }
 
 fn main() -> Result<()> {
@@ -48,6 +52,9 @@ fn main() -> Result<()> {
         forwarded.push("--watch".into());
     } else if args.no_watch {
         forwarded.push("--no-watch".into());
+    }
+    if args.debug {
+        forwarded.push("--debug".into());
     }
 
     launch(&forwarded)
