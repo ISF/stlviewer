@@ -15,7 +15,7 @@ src-tauri/target/
 src-tauri/gen/
 
 # Generated mobile icons we don't currently target — regenerate via
-# `npm run tauri icon src-tauri/icons/icon-source.png` if/when needed.
+# `bun run tauri icon src-tauri/icons/icon-source.png` if/when needed.
 src-tauri/icons/ios/
 src-tauri/icons/android/
 src-tauri/icons/Square*Logo.png

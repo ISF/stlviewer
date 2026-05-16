@@ -1,0 +1,7 @@
+# Files in here change for reasons unrelated to running the dev binary
+# (Spotlight indexing the worktree on creation, macOS dialog side-effects,
+# `tauri icon` regenerations, editing source PNGs). Tauri's dev watcher
+# would otherwise rebuild+restart on each event — which becomes a storm
+# when several fsevents fire in quick succession.
+
+icons/

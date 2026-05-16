@@ -53,7 +53,7 @@ step() { printf '\n\033[1;36m▸ %s\033[0m\n' "$*"; }
 
 if [[ $SKIP_BUILD -eq 0 ]]; then
     step "Building the macOS .app bundle (release)"
-    npm run tauri build
+    bun run tauri build
 
     step "Building the CLI shim (release)"
     cargo build --release --bin "${APP_NAME}"

@@ -16,7 +16,7 @@ backed config are next.
 ```
 stlviewer/
 ├── Cargo.toml              # Rust workspace
-├── package.json            # JS toolchain (npm-driven)
+├── package.json            # JS toolchain (Bun-driven)
 ├── vite.config.ts
 ├── tsconfig.json
 ├── index.html              # frontend entry
@@ -42,18 +42,24 @@ stlviewer/
 Required toolchain:
 
 - Rust (stable) — `rustc`, `cargo`
-- Node.js (≥ 20) and npm — `brew install node` on macOS
+- [Bun](https://bun.sh) — `brew install oven-sh/bun/bun` on macOS
 
 Install dependencies:
 
 ```sh
-npm install
+bun install
 ```
 
 Run the dev app:
 
 ```sh
-npm run tauri dev
+bun run tauri dev
+```
+
+Build a release `.app` bundle:
+
+```sh
+bun run tauri build
 ```
 
 ## Architecture
