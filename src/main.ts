@@ -345,13 +345,16 @@ async function bootstrap() {
 
   await listen("menu:open", () => void pickAndLoad());
   await listen("menu:reset_view", () => resetView());
-  await listen("menu:toggle_grid", () => {
-    grid.visible = !grid.visible;
+  // For toggleable menu items the backend has already flipped the
+  // CheckMenuItem state, persisted to Settings, and emits the new boolean
+  // as the payload. Frontend just mirrors the value.
+  await listen<boolean>("menu:toggle_grid", (e) => {
+    grid.visible = e.payload;
   });
-  await listen("menu:toggle_axes", () => {
-    axes.visible = !axes.visible;
+  await listen<boolean>("menu:toggle_axes", (e) => {
+    axes.visible = e.payload;
   });
-  await listen("menu:toggle_watch", () => void setWatchEnabled(!watchEnabled));
+  await listen<boolean>("menu:toggle_watch", (e) => void setWatchEnabled(e.payload));
 
   await listen<string>("file-changed", (e) => {
     if (e.payload) scheduleReload(e.payload);

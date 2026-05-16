@@ -6,8 +6,8 @@ use std::sync::Mutex;
 use clap::Parser;
 use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::Serialize;
-use tauri::menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu};
-use tauri::{AppHandle, Emitter};
+use tauri::menu::{AboutMetadata, CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 use crate::config::{Settings, UpAxis};
 
@@ -45,6 +45,16 @@ struct InitialArgs {
 
 #[derive(Default)]
 struct WatcherState(Mutex<Option<RecommendedWatcher>>);
+
+/// Handles to the menu-bar CheckMenuItems that mirror persistent settings.
+/// We keep them in app state so menu clicks can push the toggled value back
+/// to the item (defensive — macOS auto-toggles on click) and so the toggle
+/// command handlers can read their post-click state.
+struct CheckMenuItems<R: Runtime> {
+    grid: CheckMenuItem<R>,
+    axes: CheckMenuItem<R>,
+    watch: CheckMenuItem<R>,
+}
 
 #[tauri::command]
 fn get_initial_args(state: tauri::State<'_, InitialArgs>) -> InitialArgs {
@@ -108,7 +118,67 @@ fn stop_watch(state: tauri::State<'_, WatcherState>) {
     *state.0.lock().unwrap() = None;
 }
 
-fn build_menu<R: tauri::Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
+// --- Setting writers --------------------------------------------------------
+//
+// Each command persists to the user's KvStore (CFPreferences on macOS) so
+// menu toggles and any future settings UI survive across launches. The
+// frontend continues to drive scene state on its own — these commands are
+// purely persistence + (for the menu-mirrored ones) check-state sync.
+
+#[tauri::command]
+fn set_grid_visible(
+    settings: tauri::State<'_, Settings>,
+    items: tauri::State<'_, CheckMenuItems<tauri::Wry>>,
+    value: bool,
+) -> Result<(), String> {
+    settings.set_grid_visible(value).map_err(|e| e.to_string())?;
+    items.grid.set_checked(value).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn set_axes_visible(
+    settings: tauri::State<'_, Settings>,
+    items: tauri::State<'_, CheckMenuItems<tauri::Wry>>,
+    value: bool,
+) -> Result<(), String> {
+    settings.set_axes_visible(value).map_err(|e| e.to_string())?;
+    items.axes.set_checked(value).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn set_watch_by_default(
+    settings: tauri::State<'_, Settings>,
+    items: tauri::State<'_, CheckMenuItems<tauri::Wry>>,
+    value: bool,
+) -> Result<(), String> {
+    settings
+        .set_watch_by_default(value)
+        .map_err(|e| e.to_string())?;
+    items.watch.set_checked(value).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn set_up_axis(settings: tauri::State<'_, Settings>, value: UpAxis) -> Result<(), String> {
+    settings.set_up_axis(value).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn set_background_color(
+    settings: tauri::State<'_, Settings>,
+    value: [f32; 3],
+) -> Result<(), String> {
+    settings.set_background_color(value).map_err(|e| e.to_string())
+}
+
+fn build_menu<R: Runtime>(
+    app: &AppHandle<R>,
+    initial_grid: bool,
+    initial_axes: bool,
+    initial_watch: bool,
+) -> tauri::Result<(Menu<R>, CheckMenuItems<R>)> {
     let app_menu = Submenu::with_items(
         app,
         "stlviewer",
@@ -123,10 +193,6 @@ fn build_menu<R: tauri::Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
                     authors: Some(vec!["Ivan Sichmann Freitas".into()]),
                     copyright: Some("Copyright (c) 2026 Ivan Sichmann Freitas".into()),
                     license: Some("MIT".into()),
-                    // macOS's native About panel shows `comments` near the top
-                    // and `credits` in a smaller area below. We surface the
-                    // OCCT acknowledgement here so the LGPL attribution is
-                    // discoverable from inside the app.
                     comments: Some(
                         "STL/STEP viewer for Claude-assisted CAD design and 3D printing.".into(),
                     ),
@@ -173,6 +239,31 @@ fn build_menu<R: tauri::Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         ],
     )?;
 
+    let toggle_grid = CheckMenuItem::with_id(
+        app,
+        "toggle_grid",
+        "Show Grid",
+        true,
+        initial_grid,
+        Some("CmdOrCtrl+G"),
+    )?;
+    let toggle_axes = CheckMenuItem::with_id(
+        app,
+        "toggle_axes",
+        "Show Axes",
+        true,
+        initial_axes,
+        None::<&str>,
+    )?;
+    let toggle_watch = CheckMenuItem::with_id(
+        app,
+        "toggle_watch",
+        "Auto-Reload File",
+        true,
+        initial_watch,
+        Some("CmdOrCtrl+R"),
+    )?;
+
     let view_menu = Submenu::with_items(
         app,
         "View",
@@ -180,16 +271,10 @@ fn build_menu<R: tauri::Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         &[
             &MenuItem::with_id(app, "reset_view", "Reset View", true, Some("CmdOrCtrl+0"))?,
             &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(app, "toggle_grid", "Toggle Grid", true, Some("CmdOrCtrl+G"))?,
-            &MenuItem::with_id(app, "toggle_axes", "Toggle Axes", true, None::<&str>)?,
+            &toggle_grid,
+            &toggle_axes,
             &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(
-                app,
-                "toggle_watch",
-                "Auto-Reload File",
-                true,
-                Some("CmdOrCtrl+R"),
-            )?,
+            &toggle_watch,
         ],
     )?;
 
@@ -205,10 +290,19 @@ fn build_menu<R: tauri::Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         ],
     )?;
 
-    Menu::with_items(
+    let menu = Menu::with_items(
         app,
         &[&app_menu, &file_menu, &edit_menu, &view_menu, &window_menu],
-    )
+    )?;
+
+    Ok((
+        menu,
+        CheckMenuItems {
+            grid: toggle_grid,
+            axes: toggle_axes,
+            watch: toggle_watch,
+        },
+    ))
 }
 
 pub fn run() {
@@ -216,29 +310,52 @@ pub fn run() {
 
     let settings = Settings::new(config::default_store());
 
+    let initial_watch = resolve_watch(cli.watch, cli.no_watch, settings.watch_by_default());
+    let initial_grid = settings.grid_visible();
+    let initial_axes = settings.axes_visible();
+
     let initial = InitialArgs {
         file: cli.file.as_ref().map(|p| p.to_string_lossy().into_owned()),
-        watch: resolve_watch(cli.watch, cli.no_watch, settings.watch_by_default()),
+        watch: initial_watch,
         up_axis: settings.up_axis(),
         background_color: settings.background_color(),
-        grid_visible: settings.grid_visible(),
-        axes_visible: settings.axes_visible(),
+        grid_visible: initial_grid,
+        axes_visible: initial_axes,
         debug: cli.debug,
     };
+
+    let settings_for_state = settings.clone();
+    let settings_for_menu_handler = settings.clone();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .manage(initial)
         .manage(WatcherState::default())
-        .menu(build_menu)
-        .on_menu_event(|app, event| {
+        .manage(settings_for_state)
+        .setup(move |app| {
+            let (menu, items) =
+                build_menu(app.handle(), initial_grid, initial_axes, initial_watch)?;
+            app.set_menu(menu)?;
+            app.manage(items);
+            Ok(())
+        })
+        .on_menu_event(move |app, event| {
             let id = event.id().as_ref();
-            if matches!(
-                id,
-                "open" | "reset_view" | "toggle_grid" | "toggle_axes" | "toggle_watch"
-            ) {
-                let _ = app.emit(&format!("menu:{id}"), ());
+            match id {
+                "open" | "reset_view" => {
+                    let _ = app.emit(&format!("menu:{id}"), ());
+                }
+                "toggle_grid" | "toggle_axes" | "toggle_watch" => {
+                    // macOS auto-toggles CheckMenuItem on click before the
+                    // event fires, so is_checked() reflects the new state.
+                    let new_state = read_check(app, id);
+                    if let Some(value) = new_state {
+                        persist_toggle(&settings_for_menu_handler, id, value);
+                        let _ = app.emit(&format!("menu:{id}"), value);
+                    }
+                }
+                _ => {}
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -246,9 +363,38 @@ pub fn run() {
             read_file_bytes,
             start_watch,
             stop_watch,
+            set_grid_visible,
+            set_axes_visible,
+            set_watch_by_default,
+            set_up_axis,
+            set_background_color,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+fn read_check<R: Runtime>(app: &AppHandle<R>, id: &str) -> Option<bool> {
+    let items = app.try_state::<CheckMenuItems<R>>()?;
+    let item = match id {
+        "toggle_grid" => &items.grid,
+        "toggle_axes" => &items.axes,
+        "toggle_watch" => &items.watch,
+        _ => return None,
+    };
+    item.is_checked().ok()
+}
+
+fn persist_toggle(settings: &Settings, id: &str, value: bool) {
+    let result = match id {
+        "toggle_grid" => settings.set_grid_visible(value),
+        "toggle_axes" => settings.set_axes_visible(value),
+        "toggle_watch" => settings.set_watch_by_default(value),
+        _ => return,
+    };
+    if let Err(err) = result {
+        // Persistence failure shouldn't kill the toggle — log and move on.
+        eprintln!("[stlviewer] failed to persist {id}={value}: {err}");
+    }
 }
 
 /// Precedence: explicit CLI flag > stored config > built-in default (false).
