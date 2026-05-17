@@ -48,6 +48,24 @@ stlviewer --watch path/to/part.step  # open + reload on save
 
 `./scripts/uninstall.sh` reverses the install.
 
+### Shell completion
+
+`install.sh` writes a fish completion script to
+`/opt/homebrew/share/fish/vendor_completions.d/stlviewer.fish` (falling back
+to `~/.config/fish/completions/` when the vendor dir isn't writable). Tab
+completion lights up in a new shell automatically.
+
+For other shells, generate the script yourself — the CLI knows how:
+
+```sh
+stlviewer --completions bash       > ~/.local/share/bash-completion/completions/stlviewer
+stlviewer --completions zsh        > "${fpath[1]}/_stlviewer"
+stlviewer --completions powershell > stlviewer.ps1
+```
+
+(Adjust the destination paths for your setup. `--completions` accepts
+`bash`, `zsh`, `fish`, `powershell`, or `elvish`.)
+
 ### Build requirements
 
 - Rust (stable) — `rustc`, `cargo`

@@ -9,7 +9,8 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use anyhow::{bail, Context, Result};
-use clap::Parser;
+use clap::{CommandFactory, Parser};
+use clap_complete::Shell;
 
 #[derive(Parser, Debug)]
 #[command(name = "stlviewer", version, about = "Open STL/STEP files in stlviewer")]
@@ -28,10 +29,22 @@ struct Args {
     /// Forward --debug to the GUI for verbose console logging
     #[arg(long)]
     debug: bool,
+
+    /// Print a shell completion script to stdout and exit.
+    /// Hidden from --help because it's a tooling hook for install.sh, not a
+    /// user-facing operation. Usage: `stlviewer --completions fish > …`.
+    #[arg(long, value_enum, hide = true, value_name = "SHELL")]
+    completions: Option<Shell>,
 }
 
 fn main() -> Result<()> {
     let args = Args::parse();
+
+    if let Some(shell) = args.completions {
+        let mut cmd = Args::command();
+        clap_complete::generate(shell, &mut cmd, "stlviewer", &mut std::io::stdout());
+        return Ok(());
+    }
 
     // Canonicalize so the GUI doesn't have to know the shell's CWD. `open
     // --args` runs the GUI from an unrelated working directory.

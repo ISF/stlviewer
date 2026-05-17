@@ -40,4 +40,20 @@ if [[ -e "$CLI_DEST" ]]; then
     fi
 fi
 
+# Clean up any shell-completion files install.sh dropped. Each path covered
+# matches a corresponding install path; harmless if it isn't there.
+for f in \
+    /opt/homebrew/share/fish/vendor_completions.d/${APP_NAME}.fish \
+    /usr/local/share/fish/vendor_completions.d/${APP_NAME}.fish \
+    "${HOME}/.config/fish/completions/${APP_NAME}.fish"; do
+    if [[ -e "$f" ]]; then
+        step "Removing ${f}"
+        if [[ -w "$(dirname "$f")" ]]; then
+            rm -f "$f"
+        else
+            sudo rm -f "$f"
+        fi
+    fi
+done
+
 step "Uninstalled"
