@@ -98,7 +98,8 @@ stlviewer/
 ├── crates/
 │   └── stlviewer-cli/      # `stlviewer` shim that goes on $PATH
 ├── licenses/               # vendored third-party license texts
-├── scripts/                # icon generator, install / uninstall
+├── keys/                   # pinned release-signing public key
+├── scripts/                # icon generator, install, uninstall, release
 ├── LICENSE                 # MIT
 └── THIRD_PARTY_NOTICES.md  # OCCT / occt-import-js attribution
 ```
@@ -118,6 +119,41 @@ stlviewer/
 - **Settings** live in macOS CFPreferences via a small `KvStore` trait;
   Linux (XDG) and Windows (Registry) backends can drop in alongside without
   touching the rest of the app.
+
+## Verifying releases
+
+Each release ships an SSH-signed `.app.zip` alongside its `.sig` and
+`.sha256`. The signing public key is pinned in this repo at
+[`keys/release-signing.pub`](./keys/release-signing.pub) — that's the
+trusted out-of-band source for verification, not whatever the release
+page happens to ship.
+
+Once you've downloaded `stlviewer-vX.Y.Z-macos-<arch>.app.zip` and the
+matching `.sig` from the release page:
+
+```sh
+# Build a one-line allowed_signers from the pinned key.
+PRINCIPAL=release@stlviewer
+ZIP=stlviewer-vX.Y.Z-macos-arm64.app.zip
+KEY=$(curl -fsSL https://raw.githubusercontent.com/ISF/stlviewer/main/keys/release-signing.pub)
+echo "$PRINCIPAL namespaces=\"file\" $KEY" > /tmp/allowed_signers
+
+# Verify the signature.
+ssh-keygen -Y verify -f /tmp/allowed_signers -I "$PRINCIPAL" -n file \
+    -s "${ZIP}.sig" < "$ZIP"
+
+# Sanity-check the checksum.
+shasum -a 256 -c "${ZIP}.sha256"
+```
+
+A `Good "file" signature for release@stlviewer …` line means the artifact
+came from someone with access to the pinned private key and hasn't been
+modified since.
+
+This is **not** Apple code signing — macOS Gatekeeper still treats the
+unzipped `.app` as "unidentified developer" on first launch. The SSH
+signature is an additional, independent attestation. Apple Developer ID
+signing is a separate track that may land in a later release.
 
 ## Licensing
 
