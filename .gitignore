@@ -28,6 +28,12 @@ src-tauri/icons/StoreLogo.png
 *.swp
 *~
 
+# Release artifacts produced by scripts/release.sh — they get uploaded
+# to the GitHub release page and shouldn't sit in the repo root.
+/stlviewer-*.app.zip
+/stlviewer-*.app.zip.sig
+/stlviewer-*.app.zip.sha256
+
 # Env
 .env
 .env.local
