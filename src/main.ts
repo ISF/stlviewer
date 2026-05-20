@@ -7,6 +7,7 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 
 import { parseStl } from "./loaders/stl";
 import { parseStep } from "./loaders/step";
+import { parseThreeMf } from "./loaders/3mf";
 import { dbg, setDebugEnabled } from "./debug";
 
 type UpAxis = "z" | "y";
@@ -174,7 +175,8 @@ async function loadFile(path: string) {
   const e = ext(path);
   const isStep = e === "step" || e === "stp";
   const isStl = e === "stl";
-  if (!isStep && !isStl) {
+  const is3mf = e === "3mf";
+  if (!isStep && !isStl && !is3mf) {
     setStatus(`unsupported format: .${e}`, { error: true });
     return;
   }
@@ -201,6 +203,14 @@ async function loadFile(path: string) {
       object = new THREE.Group();
       object.add(mesh);
       triangleCount = (mesh.geometry as THREE.BufferGeometry).attributes.position.count / 3;
+    } else if (is3mf) {
+      dbg("loadFile", "calling parseThreeMf");
+      const parsed = parseThreeMf(u8, defaultMaterial);
+      object = parsed.group;
+      triangleCount = parsed.triangleCount;
+      if (parsed.partCount > 1) {
+        partInfo = `  ·  ${parsed.partCount} parts`;
+      }
     } else {
       // STEP: yield to the event loop so the "loading…" status paints
       // before occt-import-js blocks the main thread.
@@ -288,9 +298,13 @@ async function pickAndLoad() {
     multiple: false,
     directory: false,
     filters: [
-      { name: "CAD models", extensions: ["stl", "STL", "step", "STEP", "stp", "STP"] },
+      {
+        name: "CAD models",
+        extensions: ["stl", "STL", "step", "STEP", "stp", "STP", "3mf", "3MF"],
+      },
       { name: "STL Mesh", extensions: ["stl", "STL"] },
       { name: "STEP", extensions: ["step", "STEP", "stp", "STP"] },
+      { name: "3MF", extensions: ["3mf", "3MF"] },
     ],
   });
   if (typeof picked === "string") {
@@ -358,6 +372,13 @@ async function bootstrap() {
 
   await listen<string>("file-changed", (e) => {
     if (e.payload) scheduleReload(e.payload);
+  });
+
+  // Files macOS hands us via Launch Services (double-click, `open file.stl`,
+  // recent items) — Rust forwards them as a `file-open` event with the
+  // canonical path as payload. Behaves identically to drag-drop from here on.
+  await listen<string>("file-open", (e) => {
+    if (e.payload) void loadFile(e.payload);
   });
 
   const win = getCurrentWebviewWindow();
