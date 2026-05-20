@@ -46,6 +46,13 @@ struct InitialArgs {
 #[derive(Default)]
 struct WatcherState(Mutex<Option<RecommendedWatcher>>);
 
+/// Buffer for file paths macOS delivers through Launch Services
+/// (`RunEvent::Opened`) before the webview is wired up. The frontend drains
+/// this when it asks for the initial args. Files that arrive after the
+/// webview is ready are emitted as `file-open` events instead.
+#[derive(Default)]
+struct OpenedFiles(Mutex<Vec<PathBuf>>);
+
 /// Handles to the menu-bar CheckMenuItems that mirror persistent settings.
 /// We keep them in app state so menu clicks can push the toggled value back
 /// to the item (defensive — macOS auto-toggles on click) and so the toggle
@@ -57,8 +64,21 @@ struct CheckMenuItems<R: Runtime> {
 }
 
 #[tauri::command]
-fn get_initial_args(state: tauri::State<'_, InitialArgs>) -> InitialArgs {
-    state.inner().clone()
+fn get_initial_args(
+    state: tauri::State<'_, InitialArgs>,
+    opened: tauri::State<'_, OpenedFiles>,
+) -> InitialArgs {
+    let mut args = state.inner().clone();
+    // If the user double-clicked a .stl/.step/.3mf, the path was buffered by
+    // the RunEvent::Opened handler before the webview was ready. Prefer it
+    // over an absent CLI arg; if both are set, the CLI arg wins (it's the
+    // more deliberate signal).
+    if args.file.is_none() {
+        if let Some(path) = opened.0.lock().unwrap().drain(..).next() {
+            args.file = Some(path.to_string_lossy().into_owned());
+        }
+    }
+    args
 }
 
 /// Read raw bytes from any path the user has explicitly chosen (CLI arg,
@@ -327,11 +347,12 @@ pub fn run() {
     let settings_for_state = settings.clone();
     let settings_for_menu_handler = settings.clone();
 
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .manage(initial)
         .manage(WatcherState::default())
+        .manage(OpenedFiles::default())
         .manage(settings_for_state)
         .setup(move |app| {
             let (menu, items) =
@@ -369,8 +390,25 @@ pub fn run() {
             set_up_axis,
             set_background_color,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|app_handle, event| {
+        // RunEvent::Opened delivers files macOS sends via Launch Services —
+        // double-clicks, `open file.stl`, the recent-items list, etc.
+        // Always emit `file-open` so a live frontend reloads immediately;
+        // also stash in OpenedFiles so a cold-start frontend can pick it
+        // up through get_initial_args before its listeners are armed.
+        if let tauri::RunEvent::Opened { urls } = event {
+            let opened = app_handle.state::<OpenedFiles>();
+            for url in urls {
+                if let Ok(path) = url.to_file_path() {
+                    opened.0.lock().unwrap().push(path.clone());
+                    let _ = app_handle.emit("file-open", path.to_string_lossy().to_string());
+                }
+            }
+        }
+    });
 }
 
 fn read_check<R: Runtime>(app: &AppHandle<R>, id: &str) -> Option<bool> {

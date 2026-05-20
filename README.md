@@ -5,9 +5,13 @@ now; Linux and Windows are planned.
 
 ## Features
 
-- Opens `.stl` (binary or ASCII) and `.step` / `.stp` files.
-- Drag-and-drop a file onto the window, open via the native ⌘O dialog, or
-  pass a path to `stlviewer` from the terminal.
+- Opens `.stl` (binary or ASCII), `.step` / `.stp`, and `.3mf` files. For
+  `.3mf` only the embedded meshes are rendered — project / build / material
+  metadata is ignored.
+- Drag-and-drop a file onto the window, open via the native ⌘O dialog, pass
+  a path to `stlviewer` from the terminal, or double-click in Finder /
+  `open file.stl` once you've set stlviewer as the default handler
+  (Finder ▸ Get Info ▸ Open With ▸ Change All).
 - Orbit / pan / zoom with mouse + trackpad gestures. ⌘0 fits the view to
   the loaded model.
 - File watching — re-export from your CAD tool and the viewer reloads

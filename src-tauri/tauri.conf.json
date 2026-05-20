@@ -43,6 +43,29 @@
       "../licenses/occt-import-js.txt": "licenses/occt-import-js.txt",
       "../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md"
     },
+    "fileAssociations": [
+      {
+        "ext": ["stl"],
+        "name": "STL Mesh",
+        "description": "STL triangle mesh",
+        "role": "Viewer",
+        "mimeType": "model/stl"
+      },
+      {
+        "ext": ["step", "stp"],
+        "name": "STEP",
+        "description": "STEP CAD model (ISO 10303-21)",
+        "role": "Viewer",
+        "mimeType": "model/step"
+      },
+      {
+        "ext": ["3mf"],
+        "name": "3MF",
+        "description": "3D Manufacturing Format",
+        "role": "Viewer",
+        "mimeType": "model/3mf"
+      }
+    ],
     "macOS": {
       "minimumSystemVersion": "11.0"
     }
