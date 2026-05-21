@@ -204,8 +204,15 @@ async function loadFile(path: string) {
       object.add(mesh);
       triangleCount = (mesh.geometry as THREE.BufferGeometry).attributes.position.count / 3;
     } else if (is3mf) {
+      // 3MF: yield once so the loading status paints before we unzip and
+      // chew through what can be megabytes of XML on the main thread.
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
       dbg("loadFile", "calling parseThreeMf");
-      const parsed = parseThreeMf(u8, defaultMaterial);
+      const parsed = await parseThreeMf(u8, defaultMaterial);
+      dbg("loadFile", "parseThreeMf resolved", {
+        partCount: parsed.partCount,
+        triangleCount: parsed.triangleCount,
+      });
       object = parsed.group;
       triangleCount = parsed.triangleCount;
       if (parsed.partCount > 1) {
