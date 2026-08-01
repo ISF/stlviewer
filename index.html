@@ -54,6 +54,28 @@
         content: "● ";
         color: #4caf50;
       }
+      #measure-hint {
+        bottom: 8px;
+        right: 12px;
+        color: #ffcf70;
+        opacity: 0.9;
+        display: none;
+      }
+      #measure-label {
+        display: none;
+        position: fixed;
+        transform: translate(-50%, -140%);
+        padding: 2px 8px;
+        border-radius: 5px;
+        background: rgba(24, 28, 34, 0.85);
+        border: 1px solid #ffb020;
+        color: #ffcf70;
+        font-size: 13px;
+        font-variant-numeric: tabular-nums;
+        pointer-events: none;
+        white-space: nowrap;
+      }
+      body.measuring #app { cursor: crosshair; }
     </style>
   </head>
   <body>
@@ -62,6 +84,8 @@
       Drop an <code>.stl</code> or <code>.step</code> file here, or press <kbd>⌘</kbd>+<kbd>O</kbd> to open
     </div>
     <div id="status" class="overlay"></div>
+    <div id="measure-hint" class="overlay"></div>
+    <div id="measure-label"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

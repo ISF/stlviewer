@@ -61,6 +61,9 @@ struct CheckMenuItems<R: Runtime> {
     grid: CheckMenuItem<R>,
     axes: CheckMenuItem<R>,
     watch: CheckMenuItem<R>,
+    /// Transient (not persisted): mirrors the in-window measure mode,
+    /// which the frontend also toggles with the M key.
+    measure: CheckMenuItem<R>,
 }
 
 #[tauri::command]
@@ -180,6 +183,16 @@ fn set_watch_by_default(
     Ok(())
 }
 
+/// Sync the menu checkmark when measure mode is toggled from the keyboard.
+/// Unlike the toggles above this is session state, not a persisted setting.
+#[tauri::command]
+fn set_measure_mode(
+    items: tauri::State<'_, CheckMenuItems<tauri::Wry>>,
+    value: bool,
+) -> Result<(), String> {
+    items.measure.set_checked(value).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn set_up_axis(settings: tauri::State<'_, Settings>, value: UpAxis) -> Result<(), String> {
     settings.set_up_axis(value).map_err(|e| e.to_string())
@@ -283,6 +296,16 @@ fn build_menu<R: Runtime>(
         initial_watch,
         Some("CmdOrCtrl+R"),
     )?;
+    // The M keybind lives in the frontend (plain-letter menu accelerators
+    // are unreliable on macOS); this item is the discoverable entry point.
+    let toggle_measure = CheckMenuItem::with_id(
+        app,
+        "toggle_measure",
+        "Measure Distance",
+        true,
+        false,
+        None::<&str>,
+    )?;
 
     let view_menu = Submenu::with_items(
         app,
@@ -290,6 +313,8 @@ fn build_menu<R: Runtime>(
         true,
         &[
             &MenuItem::with_id(app, "reset_view", "Reset View", true, Some("CmdOrCtrl+0"))?,
+            &PredefinedMenuItem::separator(app)?,
+            &toggle_measure,
             &PredefinedMenuItem::separator(app)?,
             &toggle_grid,
             &toggle_axes,
@@ -321,6 +346,7 @@ fn build_menu<R: Runtime>(
             grid: toggle_grid,
             axes: toggle_axes,
             watch: toggle_watch,
+            measure: toggle_measure,
         },
     ))
 }
@@ -376,6 +402,12 @@ pub fn run() {
                         let _ = app.emit(&format!("menu:{id}"), value);
                     }
                 }
+                "toggle_measure" => {
+                    // Session state only — forward to the frontend, no persist.
+                    if let Some(value) = read_check(app, id) {
+                        let _ = app.emit("menu:toggle_measure", value);
+                    }
+                }
                 _ => {}
             }
         })
@@ -387,6 +419,7 @@ pub fn run() {
             set_grid_visible,
             set_axes_visible,
             set_watch_by_default,
+            set_measure_mode,
             set_up_axis,
             set_background_color,
         ])
@@ -417,6 +450,7 @@ fn read_check<R: Runtime>(app: &AppHandle<R>, id: &str) -> Option<bool> {
         "toggle_grid" => &items.grid,
         "toggle_axes" => &items.axes,
         "toggle_watch" => &items.watch,
+        "toggle_measure" => &items.measure,
         _ => return None,
     };
     item.is_checked().ok()
