@@ -8,6 +8,7 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { parseStl } from "./loaders/stl";
 import { parseStep } from "./loaders/step";
 import { parseThreeMf } from "./loaders/3mf";
+import { MeasureTool } from "./measure";
 import { dbg, setDebugEnabled } from "./debug";
 
 type UpAxis = "z" | "y";
@@ -35,6 +36,8 @@ const FALLBACK_ARGS: InitialArgs = {
 const canvas = document.getElementById("app") as HTMLCanvasElement;
 const hintEl = document.getElementById("hint") as HTMLDivElement;
 const statusEl = document.getElementById("status") as HTMLDivElement;
+const measureHintEl = document.getElementById("measure-hint") as HTMLDivElement;
+const measureLabelEl = document.getElementById("measure-label") as HTMLDivElement;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x181c22);
@@ -72,6 +75,30 @@ const defaultMaterial = new THREE.MeshStandardMaterial({
   roughness: 0.55,
   side: THREE.DoubleSide,
   flatShading: false,
+});
+
+const measure = new MeasureTool(
+  camera,
+  renderer.domElement,
+  () => currentObject,
+  measureLabelEl,
+  measureHintEl,
+);
+scene.add(measure.overlay);
+
+/** Flip measure mode locally and mirror it into the menu checkmark. */
+function setMeasureMode(on: boolean) {
+  measure.setActive(on);
+  invoke("set_measure_mode", { value: on }).catch(console.error);
+}
+
+window.addEventListener("keydown", (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === "m" || e.key === "M") {
+    setMeasureMode(!measure.active);
+  } else if (e.key === "Escape" && measure.active) {
+    setMeasureMode(false);
+  }
 });
 
 let currentObject: THREE.Object3D | null = null;
@@ -234,6 +261,9 @@ async function loadFile(path: string) {
     }
 
     disposeCurrent();
+    // Old measurement points were picked on the old geometry — drop them,
+    // but stay in measure mode if it's on.
+    measure.clearMeasurement();
     scene.add(object);
     currentObject = object;
     currentPath = path;
@@ -376,6 +406,10 @@ async function bootstrap() {
     axes.visible = e.payload;
   });
   await listen<boolean>("menu:toggle_watch", (e) => void setWatchEnabled(e.payload));
+  // Menu click: the backend has already flipped the CheckMenuItem, so only
+  // the local mode needs updating (unlike the keybind path, which pushes
+  // the checkmark back via set_measure_mode).
+  await listen<boolean>("menu:toggle_measure", (e) => measure.setActive(e.payload));
 
   await listen<string>("file-changed", (e) => {
     if (e.payload) scheduleReload(e.payload);
@@ -405,6 +439,7 @@ void bootstrap();
 function animate() {
   requestAnimationFrame(animate);
   controls.update();
+  measure.updateLabel();
   renderer.render(scene, camera);
 }
 animate();
