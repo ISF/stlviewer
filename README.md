@@ -14,6 +14,10 @@ now; Linux and Windows are planned.
   (Finder ▸ Get Info ▸ Open With ▸ Change All).
 - Orbit / pan / zoom with mouse + trackpad gestures. ⌘0 fits the view to
   the loaded model.
+- Measure distances — press `M` (or `View ▸ Measure Distance`) and click two
+  points; the segment snaps to the nearest XY / XZ / YZ plane.
+- Drag out to a slicer — ⌥-drag the model to hand the file to another app,
+  e.g. drop it straight onto Bambu Studio's build plate.
 - File watching — re-export from your CAD tool and the viewer reloads
   automatically (toggle from `View ▸ Auto-Reload File` or `--watch` on the
   command line).

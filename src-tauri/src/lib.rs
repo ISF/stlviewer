@@ -193,6 +193,31 @@ fn set_measure_mode(
     items.measure.set_checked(value).map_err(|e| e.to_string())
 }
 
+/// Start a native file drag of `path` out of the window, so the open model
+/// can be dropped into another app (e.g. a slicer). Must be called while the
+/// left mouse button is held; AppKit requires the main thread.
+#[cfg(target_os = "macos")]
+#[tauri::command]
+fn start_drag_out(window: tauri::WebviewWindow, path: PathBuf) -> Result<(), String> {
+    const ICON: &[u8] = include_bytes!("../icons/128x128.png");
+    let w = window.clone();
+    window
+        .run_on_main_thread(move || {
+            let item = drag::DragItem::Files(vec![path]);
+            let icon = drag::Image::Raw(ICON.to_vec());
+            if let Err(e) = drag::start_drag(&w, item, icon, |_, _| {}, Default::default()) {
+                eprintln!("start_drag failed: {e}");
+            }
+        })
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+fn start_drag_out(_path: PathBuf) -> Result<(), String> {
+    Err("drag-out is only supported on macOS".into())
+}
+
 #[tauri::command]
 fn set_up_axis(settings: tauri::State<'_, Settings>, value: UpAxis) -> Result<(), String> {
     settings.set_up_axis(value).map_err(|e| e.to_string())
@@ -420,6 +445,7 @@ pub fn run() {
             set_axes_visible,
             set_watch_by_default,
             set_measure_mode,
+            start_drag_out,
             set_up_axis,
             set_background_color,
         ])

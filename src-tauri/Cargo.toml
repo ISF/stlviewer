@@ -29,3 +29,4 @@ clap = { version = "4", features = ["derive"] }
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = "0.10"
 core-foundation-sys = "0.8"
+drag = "2.1"
