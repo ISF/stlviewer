@@ -101,6 +101,24 @@ window.addEventListener("keydown", (e) => {
   }
 });
 
+// ⌥-drag on the canvas hands the open file to the OS as a native file drag,
+// so it can be dropped into a slicer or Finder. Capture phase so it runs
+// before OrbitControls' own pointerdown and can swallow it.
+window.addEventListener(
+  "pointerdown",
+  (e) => {
+    if (!e.altKey || e.button !== 0 || !currentPath || e.target !== renderer.domElement) return;
+    e.preventDefault();
+    e.stopPropagation();
+    invoke("start_drag_out", { path: currentPath }).catch(console.error);
+  },
+  { capture: true },
+);
+const syncAltCursor = (e: KeyboardEvent) =>
+  document.body.classList.toggle("drag-out", e.altKey && currentPath !== null);
+window.addEventListener("keydown", syncAltCursor);
+window.addEventListener("keyup", syncAltCursor);
+
 let currentObject: THREE.Object3D | null = null;
 let currentPath: string | null = null;
 let watchEnabled = false;
