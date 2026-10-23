@@ -60,6 +60,11 @@ step() { printf '\n\033[1;36m▸ %s\033[0m\n' "$*"; }
 if [[ -z "${RELEASE_SKIP_BUILD:-}" ]]; then
     step "Building release .app"
     bun run tauri build
+
+    # Not shipped in the zip, but built here so a follow-up
+    # `scripts/install.sh --skip-build` installs a CLI shim that matches.
+    step "Building the CLI shim (release)"
+    cargo build --release --bin stlviewer
 fi
 
 APP_SOURCE=""
